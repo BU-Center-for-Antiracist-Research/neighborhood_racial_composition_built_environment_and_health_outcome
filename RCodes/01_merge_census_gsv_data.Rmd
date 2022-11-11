@@ -1,0 +1,100 @@
+---
+title: "Exploration of Neighborhood Racial Composition, Built Environment and Health Outcomes"
+output: html_document
+---
+
+```{r message=FALSE}
+library(tidyverse)
+library(dplyr)
+library(sf)
+library(readxl)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir ='/Users/ahyoungcho/Dropbox/CAR/2022 Summer/Replication/')
+```
+
+### Load 2019 ACS data
+```{r}
+race_raw_data <- readRDS("../RawData/census/race_raw_data.rds")
+race_percent_data <- readRDS("../RawData/census/race_percent_data.rds")
+econ_data <- readRDS("../RawData/census/econ_data.rds")
+college_percent_data <- readRDS("../RawData/census/college_percent_data.rds")
+age_data <- readRDS("../RawData/census/age_data.rds")
+female_percent_data <- readRDS("../RawData/census/female_percent_data.rds")
+insurance_percent_data <- readRDS("../RawData/census/insurance_percent_data.rds")
+owner_occupied_percent_data <- readRDS("../RawData/census/owner_occupied_percent_data.rds")
+vacant_housing_percent_data <- readRDS("../RawData/census/vacant_housing_percent_data.rds")
+single_fam_percent_data <- readRDS("../RawData/census/single_fam_percent_data.rds")
+```
+
+### Create a one dataset
+```{r}
+# Put all data frames into list
+df_list <- list(race_raw_data, race_percent_data, econ_data, college_percent_data, 
+                age_data, female_percent_data, insurance_percent_data, owner_occupied_percent_data,
+                vacant_housing_percent_data, single_fam_percent_data)
+
+# Merge all data frames together
+census_data <- df_list %>% reduce(full_join, by=c("GEOID")) %>%
+  dplyr::select(-NAME.y, -NAME.x.x, -NAME.y.y, -NAME.x.x.x, -NAME.y.y.y, -NAME.x.x.x.x, -NAME.y.y.y.y, -NAME.x.x.x.x.x, -NAME.y.y.y.y.y) %>%
+  dplyr::rename(NAME = NAME.x)
+
+saveRDS(census_data, file = "../RawData/census/census_data.rds")
+```
+
+### Merge GSV and ACS data
+```{r}
+tract_gsv <- read.csv("../RawData/GSV_censustract.csv", colClasses = c(tract2010 = "character"))
+census_data <- readRDS("../RawData/census/census_data.rds")
+
+tract_gsv$GEOID <- as.character(tract_gsv$tract2010)
+
+gsv_covariates_census <- inner_join(tract_gsv, census_data, by = "GEOID")
+
+# Split name column into firstname and last name
+gsv_covariates_census <- gsv_covariates_census %>% 
+  separate(NAME, c('Census', 'County', 'State'), sep = ", ") %>%
+  as.tibble()
+
+saveRDS(gsv_covariates_census, file = "../FinalData/gsv_covariates_census.rds")
+```
+
+### Add Urban-Rural Continuuam 
+```{r}
+ruca2010revised <- read_excel("../RawData/ruca2010revised.xlsx")
+
+gsv_covariates_census_urban <- merge(gsv_covariates_census, ruca2010revised %>% 
+                                       dplyr::select("State-County-Tract FIPS Code (lookup by address at http://www.ffiec.gov/Geocode/)", "Primary RUCA Code 2010"),
+      by.x = 'tract2010',
+      by.y='State-County-Tract FIPS Code (lookup by address at http://www.ffiec.gov/Geocode/)',
+      all.x=TRUE
+      )
+
+gsv_covariates_census_urban <- gsv_covariates_census_urban %>%
+  mutate(Urban_Rural_New = recode_factor(`Primary RUCA Code 2010`,
+                                         `1`=1, `2`=1, `3`=1,
+                                         `4`=2, `5`=2, `6`=2,
+                                         `7`=3, `8`=3, `9`=3,
+                                         `10`=4))
+```
+
+### Merge with health outcomes 
+```{r}
+PLACES_shp <- st_read("../RawData/PLACES_ Census Tract Data (GIS Friendly Format), 2020 release/geo_export_d616bbc1-d560-4c9b-984e-57c9e4cb5117.shp")
+
+PLACES_shp <- PLACES_shp %>%
+  dplyr::rename(GEOID = tractfips) %>%
+  mutate(GEOID = as.character(GEOID))
+
+df <- inner_join(gsv_covariates_census_urban, PLACES_shp, by = c("GEOID"))
+
+saveRDS(df, file = "../FinalData/finaldata.rds")
+```
+
+
+
+
+
+
+
+

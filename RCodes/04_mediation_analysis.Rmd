@@ -1,0 +1,189 @@
+---
+title: "Exploration of Neighborhood Racial Composition, Built Environment and Health Outcomes"
+output: html_document
+---
+
+```{r message=FALSE}
+library(tidyr)
+library(tidyverse)
+library(dplyr)
+library(lme4)
+library(lmerTest)
+library(merTools)
+library(bife)
+
+options(scipen = 999)
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir ='/Users/ahyoungcho/Dropbox/CAR/2022 Summer/')
+
+# Load data 
+df <- readRDS(file = "..//FinalData/finaldata.rds")
+```
+
+
+```{r}
+df_composition <- df %>%
+  mutate(Composition = ifelse(White >= 60 & Black < 20 & Hispanic < 20 & Asian < 20 & Native < 20 & HIPI < 20, "PW",
+                       ifelse(Black >= 50 & White < 20 & Hispanic < 20 & Asian < 20 & Native < 20 & HIPI < 20, "PB",
+                        ifelse(Black < 20 & White < 20 & (Asian >= 50 | Hispanic >= 50 | Native >= 50 | HIPI >= 50), "PNB", "Mixed"))))  %>%
+  mutate(Composition = factor(Composition),
+         bi_PW = ifelse(Composition == "PW", 1, 0),
+         bi_PB = ifelse(Composition == "PB", 1, 0),
+         bi_PNB = ifelse(Composition == "PNB", 1, 0),
+         bi_mixed = ifelse(Composition == "Mixed", 1, 0)) %>%
+  mutate(Pct_college = Pct_college / 100,
+  Pct_Female = Pct_Female / 100,
+  Pct_insurance = Pct_insurance / 100,
+  Pct_Owner = Pct_Owner / 100, 
+  Pct_Vacant = Pct_Vacant / 100,
+  Pct_SingleFam = Pct_SingleFam /100,
+  Urban_Rural_New = as.numeric(Urban_Rural_New))
+
+df_composition$Composition <- relevel(df_composition$Composition, "PW")
+
+df_composition <- df_composition %>% dplyr::select(-geometry) %>% 
+  filter(Urban_Rural_New == 1)
+```
+
+# Mediation
+## Define the function
+```{r}
+lmer_topo_mediatin=function(treatment_var, med_var, outcome_var, REML=FALSE){
+    dat <- df_composition %>%  drop_na(c(treatment_var, med_var, outcome_var, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam , State))
+    
+    formula_total=formula(paste0(outcome_var,'~',treatment_var,"+ log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner+Pct_Vacant+Pct_SingleFam + (1 |State)" ))
+    fit.totaleffect <- lmer(formula_total ,
+    data =dat,
+    REML = REML)
+    
+    formula_med=formula(paste0(med_var,'~',treatment_var,"+ log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner+Pct_Vacant+Pct_SingleFam+ (1 |State)" ))
+    fit.mediator  <- lmer(formula_med, 
+                      data =dat,
+                      REML=REML
+                      )
+
+    formula_dv=formula(paste0(outcome_var,'~',treatment_var,'+',med_var,"+ log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner+Pct_Vacant+Pct_SingleFam + (1 |State)" ))
+    fit.dv   <-  lmer(formula_dv,
+    data =dat,
+    REML = REML)
+
+  class(fit.mediator)<- 'lmerMod'
+  class(fit.dv)<- 'lmerMod'
+  class(fit.totaleffect) <- 'lmerMod'
+
+  med_pw_pb <- mediation::mediate(fit.mediator, fit.dv, treat=treatment_var,
+                                  control.value = 'PW', treat.value = 'PB',
+                                    boot=FALSE, mediator=med_var)
+  print('PW V.S. PB')
+  print(summary(med_pw_pb))
+  
+  
+  med_pw_pnb <- mediation::mediate(fit.mediator, fit.dv, treat=treatment_var,
+                                  control.value = 'PW', treat.value = 'PNB',
+                                    boot=FALSE, mediator=med_var)
+  print('PW V.S. PNB')
+  print(summary(med_pw_pnb))
+  
+  med_pw_mixed <- mediation::mediate(fit.mediator, fit.dv, treat=treatment_var,
+                                  control.value = 'PW', treat.value = 'Mixed',
+                                    boot=FALSE, mediator=med_var)
+  print('PW V.S. Mixed')
+  print(summary(med_pw_mixed))
+  
+  
+  return(c(med_pw_pb,med_pw_pnb,med_pw_mixed))
+  
+}
+
+lmer_topo_mediatin_unadjusted=function(treatment_var, med_var, outcome_var, REML=TRUE){
+    dat <- df_composition %>%  drop_na(c(treatment_var, med_var, outcome_var, State))
+    
+    formula_total=formula(paste0(outcome_var,'~',treatment_var," + (1 |State)" ))
+    fit.totaleffect <- lmer(formula_total ,
+    data =dat,
+    REML = REML)
+    
+    formula_med=formula(paste0(med_var,'~',treatment_var,"+ (1 |State)" ))
+    fit.mediator  <- lmer(formula_med, 
+                      data =dat,
+                      REML=REML
+                      )
+
+    formula_dv=formula(paste0(outcome_var,'~',treatment_var,'+',med_var," + (1 |State)" ))
+    fit.dv   <-  lmer(formula_dv,
+    data =dat,
+    REML = REML)
+
+  class(fit.mediator)<- 'lmerMod'
+  class(fit.dv)<- 'lmerMod'
+  class(fit.totaleffect) <- 'lmerMod'
+
+  med_pw_pb <- mediation::mediate(fit.mediator, fit.dv, treat=treatment_var,
+                                  control.value = 'PW', 
+                                  treat.value = 'PB',
+                                    boot=FALSE, mediator=med_var)
+  print('PW V.S. PB')
+  print(summary(med_pw_pb))
+  
+  
+  med_pw_pnb <- mediation::mediate(fit.mediator, fit.dv, treat=treatment_var,
+                                  control.value = 'PW', treat.value = 'PNB',
+                                    boot=FALSE, mediator=med_var)
+  print('PW V.S. PNB')
+  print(summary(med_pw_pnb))
+  
+  med_pw_mixed <- mediation::mediate(fit.mediator, fit.dv, treat=treatment_var,
+                                  control.value = 'PW', treat.value = 'Mixed',
+                                    boot=FALSE, mediator=med_var)
+  print('PW V.S. Mixed')
+  print(summary(med_pw_mixed))
+  
+  
+  return(c(med_pw_pb,med_pw_pnb,med_pw_mixed))
+  
+}
+
+```
+
+## Urban unadjusted
+```{r}
+be_cols=c("prop_dilapbldg", "prop_green", "prop_crosswalk","prop_not_single_family_home", "prop_single_lane")
+
+health_cols=c('casthma_cr','diabetes_c' ,'sleep_crud')
+
+for (health in health_cols){
+  for (be in be_cols){
+        capture.output(paste(health,'mediated by',be), file = paste0('../Output/lmer_urban_unadjusted/',health,'~',be,'.txt'),append=TRUE)
+    
+    
+    capture.output(lmer_topo_mediatin_unadjusted('Composition', be,health, FALSE), file = paste0('../Output/lmer_urban_unadjusted/',health,'~',be,'.txt'),append=TRUE)
+    
+    
+      capture.output('=======================', file = paste0('../Output/lmer_urban_unadjusted/',health,'~',be,'.txt'),append=TRUE)
+
+}
+  }
+```
+
+## Urban Adjusted
+```{r}
+be_cols=c("prop_dilapbldg", "prop_green","prop_crosswalk","prop_not_single_family_home", "prop_single_lane")
+
+health_cols=c('casthma_cr','diabetes_c' ,'sleep_crud')
+
+for (health in health_cols){
+  for (be in be_cols){
+        capture.output(paste(health,'mediated by',be), file = paste0('../Output/lmer_urban/',health,'~',be,'.txt'),append=TRUE)
+    
+    
+    capture.output(lmer_topo_mediatin('Composition', be,health, FALSE), file = paste0('../Output/lmer_urban/',health,'~',be,'.txt'),append=TRUE)
+    
+    
+      capture.output('=======================', file = paste0('../Output/lmer_urban/',health,'~',be,'.txt'),append=TRUE)
+
+}
+  }
+```
+
+
