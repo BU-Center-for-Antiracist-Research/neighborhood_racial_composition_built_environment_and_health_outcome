@@ -1,13 +1,13 @@
 # Neighborhood Racial Composition, Historical Redlining and the Built Environment: A Cross-Sectional Analysis
 
 
-This repository contains for the data and code for the paper **Neighborhood Racial Composition, Historical Redlining and the Built Environment: A Cross-Sectional Analysis**
+This repository contains the data and code for the paper **Neighborhood Racial Composition, Historical Redlining and the Built Environment: A Cross-Sectional Analysis**
 
 
 
 ## Documentation
 
-- FinalData: this folder contains the final dataset we constructed for the analysis. The finaldata_holc contains the additional variables for HOLC graded analysis.
+- FinalData: this folder contains the final datasets we constructed for the analysis. The finaldata_holc contains the additional variables for HOLC graded analysis.
 - RCodes: this folder contains the R scripts for the data analysis. Scripts are numbered in sequence.
 - Output: this folder contains the tables and figures we used in the paper or the supplementary materials.
 - QGISProject: this fodler contains the QGIS project and the corresponding shapefiles used for producing Figure 1 in the paper.
