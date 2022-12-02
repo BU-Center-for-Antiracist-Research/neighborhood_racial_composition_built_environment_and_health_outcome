@@ -1,0 +1,279 @@
+---
+title: "additional_analysis"
+output: html_document
+---
+# Loading Data
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(nnet)
+library(tidyr)
+library(tidyverse)
+library(dplyr)
+library(car)
+library(stargazer)
+library(reshape)
+library(modelsummary)
+library(knitr)
+library(stringr)
+library(effects)
+
+library(mclogit)
+library(sf)
+library(lme4)
+library(lmerTest)
+library(merTools)
+library(bife)
+library(lfe)
+library(texreg)
+
+
+options(scipen = 999)
+
+
+# Load data 
+df_holc_v2= readRDS('../../FinalData/finaldata_holc.rds')
+
+```
+
+
+# Contengency Table
+```{r results='asis'}
+
+library(corrplot)
+library(ggcorrplot)
+library(ztable)
+library(magrittr)
+options(ztable.type = "html")
+df_holc_v2$majority_grade = factor(df_holc_v2$majority_grade, levels = c('A','B','C','D','Other'))
+
+df_analysis <- df_holc_v2 %>%
+  dplyr::select(sleep_crud, diabetes_c, casthma_cr, prop_dilapbldg, prop_2ormorecars, prop_chainlink, prop_letters, prop_streetlight, prop_green, prop_crosswalk, prop_not_single_family_home, prop_single_lane, prop_visible_wire, prop_sidewalk, Hispanic, Asian, Black, White, Median.household.income, Pct_college, Age, Pct_Female, Pct_insurance, Pct_Owner, Pct_Vacant, Pct_SingleFam,Composition, majority_grade) %>%
+  na.omit()
+
+contengency_tab=table(df_analysis$Composition, df_analysis$majority_grade)
+con_tab_by_topo=prop.table(table(df_analysis$Composition, df_analysis$majority_grade),1)
+con_tab_by_grade=prop.table(table(df_analysis$Composition, df_analysis$majority_grade),2)
+
+print(ztable(con_tab_by_topo))
+
+ztable(con_tab_by_topo)%>% makeHeatmap() %>% print(caption="Percent Breakdown by Topology")
+
+ztable(con_tab_by_grade)%>% makeHeatmap() %>% print(caption="Percent Breakdown by Grade")
+
+
+chisq.test(df_analysis$Composition, df_analysis$majority_grade, correct=TRUE)
+```
+
+
+# Distribution by Grade
+### Ridge
+```{r}
+library(ggplot2)
+library(ggridges)
+be_cols=c("prop_dilapbldg", "prop_green",                "prop_crosswalk","prop_not_single_family_home", "prop_single_lane")
+
+df_grade_melted <- df_holc_v2 %>% 
+  dplyr::select(c(be_cols, 'majority_grade', diabetes_c, sleep_crud, casthma_cr)) %>% 
+  mutate(
+  diabetes_c=diabetes_c/100,
+  sleep_crud=sleep_crud/100,
+  casthma_cr=casthma_cr/100) %>% 
+  pivot_longer(cols = -majority_grade)
+
+ridge_plot=ggplot(df_grade_melted %>% drop_na(majority_grade), 
+       aes(x = value, 
+           y = factor(name, levels=c("prop_dilapbldg","prop_green","prop_crosswalk",
+                                     "prop_not_single_family_home", "prop_single_lane",
+                                     "diabetes_c","sleep_crud","casthma_cr")), 
+           fill= stat(x))) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01,panel_scaling=TRUE) +
+  # scale_fill_viridis_c(name = "value", option = "pastel") +
+  scale_fill_gradient2(low='#FFC4D0',mid = "#98CFD1", high='#E4CBF9',midpoint = 0.5,
+                       name='Value')+
+  scale_y_discrete(expand = c(0, 0), labels=c('% Dipalidated Building','% Green','% Crosswalk','% Not Single Family Homes','% Singel Lane',
+                                              'Diabetes','Sleeping Problems','Asthma')) +
+  scale_x_continuous(expand = c(0, 0)) +
+  facet_wrap(.~factor(majority_grade, levels = c('A','B','C','D','Other'),
+                    ), scales = 'free_x') +
+  theme_ridges()+theme(panel.spacing.x = unit(2, "lines"),
+                       panel.spacing.y = unit(1, "lines"),
+                       strip.text.x = element_text(size = 10,
+                                                   margin = margin(b = 2, t = 2)),
+                       axis.text = element_text(size = 8),
+                       axis.title = element_blank(),
+                       legend.text = element_text(size = 8),
+                       legend.title = element_text(size = 10),
+                       strip.background = element_rect(
+     size=3.5
+     ))
+
+ridge_plot
+```
+
+### Box Plot
+```{r}
+ggplot(df_grade_melted, aes(x=name, y=value, )) + 
+  geom_boxplot(aes(fill=name)) + facet_grid(majority_grade ~ .)
+```
+
+
+# HLM with State
+## Dilapidated Building 
+```{r}
+
+df_holc_v2$majority_grade = factor(df_holc_v2$majority_grade, levels = c('A','B','C','D','Other'))
+
+df_prop_dilapbldg <- df_holc_v2 %>%
+  dplyr::select(prop_dilapbldg, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State, county_code,
+                majority_grade) %>%
+  na.omit()
+
+mod_na_fe1 <- lmer(prop_dilapbldg ~ majority_grade + (1|State),
+                   data = df_prop_dilapbldg)
+
+mod_na_cov_fe1 <- lmer(prop_dilapbldg ~ majority_grade + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam + (1|State),
+                       data = df_prop_dilapbldg, REML=FALSE)
+
+performance::icc(mod_na_fe1, by_group = TRUE)
+
+performance::icc(mod_na_cov_fe1, by_group = TRUE)
+```
+
+## Green Space
+```{r}
+df_prop_green <- df_holc_v2 %>%
+  dplyr::select(prop_green, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam , State, 
+                majority_grade, county_code) %>%
+  na.omit()
+
+mod_na_fe2 <- lmer(prop_green ~ majority_grade +(1| State),
+                   data = df_prop_green)
+
+mod_na_cov_fe2 <- lmer(prop_green ~ majority_grade + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_green)
+
+
+performance::icc(mod_na_fe2, by_group = TRUE)
+
+performance::icc(mod_na_cov_fe2, by_group = TRUE)
+```
+
+## Crosswalk
+```{r}
+df_prop_crosswalk <- df_holc_v2 %>%
+  dplyr::select(prop_crosswalk, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State,majority_grade, county_code) %>%
+  na.omit()
+
+mod_na_fe3 <- lmer(prop_crosswalk ~ majority_grade +(1| State),
+                   data = df_prop_crosswalk)
+
+mod_na_cov_fe3 <- lmer(prop_crosswalk ~ majority_grade + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_crosswalk)
+
+
+performance::icc(mod_na_fe3, by_group = TRUE)
+
+performance::icc(mod_na_cov_fe3, by_group = TRUE)
+```
+
+## Not single family home 
+```{r}
+df_prop_not_single_family_home <- df_holc_v2 %>%
+  dplyr::select(prop_not_single_family_home, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance, majority_grade, Pct_Owner , Pct_Vacant , Pct_SingleFam, State, county_code) %>%
+  na.omit()
+
+mod_na_fe4 <- lmer(prop_not_single_family_home ~ majority_grade +(1| State),
+                   data = df_prop_not_single_family_home)
+
+mod_na_cov_fe4 <- lmer(prop_not_single_family_home ~ majority_grade + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam+(1| State),
+                       data = df_prop_not_single_family_home)
+
+performance::icc(mod_na_fe4, by_group = TRUE)
+
+performance::icc(mod_na_cov_fe4, by_group = TRUE)
+```
+
+## Single Lane 
+```{r}
+df_prop_single_lane <- df_holc_v2 %>%
+  dplyr::select(prop_single_lane, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State, county_code,majority_grade) %>%
+  na.omit()
+
+mod_na_fe5 <- lmer(prop_single_lane ~ majority_grade +(1| State),
+                   data = df_prop_single_lane)
+
+mod_na_cov_fe5 <- lmer(prop_single_lane ~majority_grade + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_single_lane)
+
+performance::icc(mod_na_fe5, by_group = TRUE)
+
+performance::icc(mod_na_cov_fe5, by_group = TRUE)
+```
+
+
+# Split Tables
+```{r}
+library(sjPlot) 
+library(sjmisc)
+
+tab_model(mod_na_fe1,  
+          mod_na_fe2,  
+          mod_na_fe3,  
+          mod_na_fe4,  
+          mod_na_fe5,  
+          show.reflvl = TRUE,
+          # show.se = FALSE,
+          col.order = c("response.level","est", "ci","p"),
+          show.ci = 0.95,
+          p.style = "numeric",
+          dv.labels = c("% Dilapidated",  "% Green Space",  "% Crosswalk",  "% Non-Single Family Home",  "% Single Lane"),
+          pred.labels = c("Intercept",
+                          # 'A (green)—“best” (Ref)',
+                          'B (blue)—“still desirable”',
+                          'C (yellow)— “definitely declining”',
+                          'D (red)—“hazardous”',
+                          "Other"
+                          ),
+          CSS = list(
+            modelcolumn1 = "background-color: #f0f0f0;", 
+            modelcolumn3 = "background-color: #f0f0f0;", 
+            modelcolumn5 = "background-color: #f0f0f0;"
+  ),
+   file = "../../Output/Supplementary/TableS4.html")
+
+
+tab_model(mod_na_cov_fe1, 
+          mod_na_cov_fe2, 
+          mod_na_cov_fe3, 
+          mod_na_cov_fe4, 
+          mod_na_cov_fe5, 
+          show.reflvl = TRUE,
+          # show.se = FALSE,
+          col.order = c("response.level","est", "ci","p"),
+          show.ci = 0.95,
+          p.style = "numeric",
+          dv.labels = c("% Dilapidated",  "% Green Space", "% Crosswalk",   "% Non-Single Family Home",  "% Single Lane"),
+          pred.labels = c("Intercept",
+                          # 'A (green)—“best” (Ref)',
+                          'B (blue)—“still desirable”',
+                          'C (yellow)— “definitely declining”',
+                          'D (red)—“hazardous”',
+                          "Other",
+                          "log(Household Income)",
+                          "% College",
+                          "Age",
+                          "% Female",
+                          "% Insured",
+                          "% Owner",
+                          "% Vacant",
+                          "% Single Family"),
+          CSS = list(
+            modelcolumn1 = "background-color: #f0f0f0;", 
+            modelcolumn3 = "background-color: #f0f0f0;", 
+            modelcolumn5 = "background-color: #f0f0f0;"
+  ),
+   file = "../../Output/Supplementary/TableS5.html")
+```
+
+

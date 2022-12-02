@@ -1,0 +1,52 @@
+---
+title: "K-Median Clustering"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(cluster)
+library(factoextra)
+library(NbClust)
+
+
+df=readRDS('../../FinalData/finaldata.rds')
+```
+
+# Choosing Best K
+
+```{r data prep}
+non_na=df %>% select(-geometry) %>% dplyr::filter(Urban_Rural_New==1) %>%  drop_na()
+five_be_df = non_na %>% select(prop_dilapbldg, prop_green, prop_crosswalk, prop_not_single_family_home, prop_single_lane) 
+
+
+set.seed(123)
+fviz_nbclust(five_be_df, clara, method = "gap_stat", nboot = 50)+
+  labs(subtitle = "Gap statistic method")
+
+
+```
+
+
+# generating cluster labels
+```{r}
+clara.res <- clara(five_be_df, 4, samples = 50, pamLike = TRUE)
+
+print(clara.res)
+
+non_na_with_cluster=cbind(non_na, cluster = clara.res$cluster)
+
+write_csv(non_na_with_cluster,'../../FinalData/four_cluster_urban.csv')
+```
+
+
+```{r}
+fviz_cluster(clara.res, geom="point", 
+             alpha=0.1,shape=19,
+             show.clust.cent=TRUE, ellipse.alpha=0.3)
+```
+
+

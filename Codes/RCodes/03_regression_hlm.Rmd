@@ -1,0 +1,571 @@
+---
+title: "Neighborhood Racial Composition, Built Environment and Health Outcomes (Table 2)"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+library(nnet)
+library(tidyr)
+library(tidyverse)
+library(dplyr)
+library(car)
+library(stargazer)
+library(reshape)
+library(modelsummary)
+library(knitr)
+library(stringr)
+library(effects)
+
+library(lme4)
+library(lmerTest)
+library(merTools)
+library(bife)
+library(lfe)
+library(texreg)
+
+library(sjPlot) # table functions
+library(sjmisc) # sample data
+
+options(scipen = 999)
+
+knitr::opts_chunk$set(echo = TRUE)
+
+
+# Load data 
+
+df <- readRDS(file = "../../FinalData/finaldata.rds")
+```
+
+### Table 2 
+
+#### Neighborhood Composition 
+
+1. Predominantly white: Tracts where there are at least 60% of non-Hispanic whites and no minority group represents more than 20%.
+2. Predominantly black: Tracts that have at least 50% non-Hispanic blacks and no more than 20% of another racial/ethnic group
+3. Predominantly non-black minority: Tracts consist of at least 50% of a certain non-black minority and no more than 20% of non-Hispanic blacks
+Mixed: Tracts that annot be classified into any of the typologies above. 
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+df_composition <- df %>%
+  dplyr::select(-geometry) %>%
+  mutate(Composition = ifelse(White >= 60 & Black < 20 & Hispanic < 20 & Asian < 20 & Native < 20 & HIPI < 20, "Predominantly White",
+                       ifelse(Black >= 50 & White < 20 & Hispanic < 20 & Asian < 20 & Native < 20 & HIPI < 20, "Predominantly Black",
+                        ifelse(Black < 20 & White < 20 & (Asian >= 50 | Hispanic >= 50 | Native >= 50 | HIPI >= 50), "Predominantly minoritized racial group other than Black", "Mixed"))))  %>%
+  mutate(Composition = factor(Composition),
+         bi_PW = ifelse(Composition == "Predominantly White", 1, 0),
+         bi_PB = ifelse(Composition == "Predominantly Black", 1, 0),
+         bi_PNB = ifelse(Composition == "Predominantly minoritized racial group other than Black", 1, 0),
+         bi_mixed = ifelse(Composition == "Mixed", 1, 0)) %>%
+  mutate(Pct_college = Pct_college / 100,
+  Pct_Female = Pct_Female / 100,
+  Pct_insurance = Pct_insurance / 100,
+  Pct_Owner = Pct_Owner / 100, 
+  Pct_Vacant = Pct_Vacant / 100,
+  Pct_SingleFam = Pct_SingleFam /100,
+  Urban_Rural_New = as.numeric(Urban_Rural_New))
+
+df_composition$Composition <- relevel(df_composition$Composition, "Predominantly White")
+
+df_composition <- df_composition %>%
+  dplyr::filter(Urban_Rural_New == 1)
+```
+
+```{r}
+table(df_composition$Composition)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Dilapidated Building 
+
+df_prop_dilapbldg <- df_composition %>%
+  dplyr::select(prop_dilapbldg, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe1 <- lmer(prop_dilapbldg ~ Composition + (1|State),
+                   data = df_prop_dilapbldg, REML=FALSE)
+
+mod_na_cov_fe1 <- lmer(prop_dilapbldg ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam + (1|State),
+                       data = df_prop_dilapbldg, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Green Space
+
+df_prop_green <- df_composition %>%
+  dplyr::select(prop_green, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam , State) %>%
+  na.omit()
+
+mod_na_fe2 <- lmer(prop_green ~ Composition +(1| State),
+                   data = df_prop_green, REML=FALSE)
+
+mod_na_cov_fe2 <- lmer(prop_green ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_green, REML=FALSE)
+```
+
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Crosswalk
+
+df_prop_crosswalk <- df_composition %>%
+  dplyr::select(prop_crosswalk, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe3 <- lmer(prop_crosswalk ~ Composition + (1| State),
+                   data = df_prop_crosswalk, REML=FALSE)
+
+mod_na_cov_fe3 <- lmer(prop_crosswalk ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_crosswalk, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Not single family home 
+
+df_prop_not_single_family_home <- df_composition %>%
+  dplyr::select(prop_not_single_family_home, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe4 <- lmer(prop_not_single_family_home ~ Composition +(1| State),
+                   data = df_prop_not_single_family_home, REML=FALSE)
+
+mod_na_cov_fe4 <- lmer(prop_not_single_family_home ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant +  Pct_SingleFam + (1| State),
+                       data = df_prop_not_single_family_home, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Single Lane 
+
+df_prop_single_lane <- df_composition %>%
+  dplyr::select(prop_single_lane, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe5 <- lmer(prop_single_lane ~ Composition +(1| State),
+                   data = df_prop_single_lane, REML=FALSE)
+
+mod_na_cov_fe5 <- lmer(prop_single_lane ~Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_single_lane, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+# Table 2
+tab_model(mod_na_cov_fe1, 
+          mod_na_cov_fe2, 
+          mod_na_cov_fe3, 
+          mod_na_cov_fe4, 
+          mod_na_cov_fe5, 
+          show.se = FALSE,
+          collapse.se = FALSE,
+          col.order = c("est", "ci", "p"),
+          show.stat = TRUE,
+          show.ci = 0.95,
+          collapse.ci = FALSE,
+          p.style = "numeric",
+          digits.p = 2,
+          dv.labels = c("% Dilapidated", "% Green Space",  "% Crosswalk", "% Non-Single Family Home",  "% Single Lane", ""),
+          pred.labels = c("Intercept",
+                          "Mixed",
+                          "Predominantly Black",
+                          "Predominantly minoritized racial group other than Black",
+                          "log(Household Income)",
+                          "% College",
+                          "Age",
+                          "% Female",
+                          "% Insured",
+                          "% Owner",
+                          "% Vacant",
+                          "% Single Family"),
+          CSS = list(
+            modelcolumn1 = "background-color: #f0f0f0;", 
+            modelcolumn3 = "background-color: #f0f0f0;", 
+            modelcolumn5 = "background-color: #f0f0f0;"
+  )
+  ,
+  file = "../../Output/Table2.html"
+)
+
+### Null models (Supplementary Materials Table S2)
+tab_model(mod_na_fe1, 
+          mod_na_fe2, 
+          mod_na_fe3, 
+          mod_na_fe4, 
+          mod_na_fe5, 
+          show.se = FALSE,
+          collapse.se = FALSE,
+          col.order = c("response.level","est", "ci", "p"),
+          show.stat = TRUE,
+          show.ci = 0.95,
+          collapse.ci = FALSE,
+          p.style = "numeric",
+          digits.p = 2,
+          dv.labels = c("% Dilapidated", "% Green Space",  "% Crosswalk", "% Non-Single Family Home",  "% Single Lane", ""),
+          pred.labels = c("Intercept",
+                          "Mixed",
+                          "Predominantly Black",
+                          "Predominantly minoritized racial group other than Black"
+                          
+                          ),
+          CSS = list(
+            modelcolumn1 = "background-color: #f0f0f0;", 
+            modelcolumn3 = "background-color: #f0f0f0;", 
+            modelcolumn5 = "background-color: #f0f0f0;"
+  )
+  ,
+  file = "../../Output/Supplementary/TableS2.html"
+)
+```
+
+### Supplementary Materials 
+
+#### Section G Sensitivity Analysis 
+
+##### Table S8. No cut-off
+
+1. Predominantly white: Tracts where there are at least 60% of non-Hispanic whites
+2. Predominantly black: Tracts that have at least 50% non-Hispanic blacks
+3. Predominantly non-black minority: Tracts consist of at least 50% of a certain non-black minority 
+Mixed: Tracts that cannot be classified into any of the typologies above. 
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+df_composition <- df %>%
+  dplyr::select(-geometry) %>%
+  mutate(Composition = ifelse(White >= 60, "PW",
+                       ifelse(Black >= 50, "PB",
+                        ifelse(Asian >= 50 | Hispanic >= 50 | Native >= 50 | HIPI >= 50, "PNB", "Mixed"))))  %>%
+  mutate(Composition = factor(Composition),
+         bi_PW = ifelse(Composition == "PW", 1, 0),
+         bi_PB = ifelse(Composition == "PB", 1, 0),
+         bi_PNB = ifelse(Composition == "PNB", 1, 0),
+         bi_mixed = ifelse(Composition == "Mixed", 1, 0)) %>%
+  mutate(Pct_college = Pct_college / 100,
+  Pct_Female = Pct_Female / 100,
+  Pct_insurance = Pct_insurance / 100,
+  Pct_Owner = Pct_Owner / 100, 
+  Pct_Vacant = Pct_Vacant / 100,
+  Pct_SingleFam = Pct_SingleFam /100,
+  Urban_Rural_New = as.numeric(Urban_Rural_New))
+
+df_composition$Composition <- relevel(df_composition$Composition, "PW")
+
+df_composition <- df_composition %>%
+  dplyr::filter(Urban_Rural_New == 1)
+```
+
+```{r}
+table(df_composition$Composition)
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Dilapidated Building 
+
+df_prop_dilapbldg <- df_composition %>%
+  dplyr::select(prop_dilapbldg, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe1 <- lmer(prop_dilapbldg ~ Composition + (1|State),
+                   data = df_prop_dilapbldg, REML=FALSE)
+
+mod_na_cov_fe1 <- lmer(prop_dilapbldg ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam + (1|State),
+                       data = df_prop_dilapbldg, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Green Space
+
+df_prop_green <- df_composition %>%
+  dplyr::select(prop_green, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam , State) %>%
+  na.omit()
+
+mod_na_fe2 <- lmer(prop_green ~ Composition +(1| State),
+                   data = df_prop_green, REML=FALSE)
+
+mod_na_cov_fe2 <- lmer(prop_green ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_green, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Crosswalk
+
+df_prop_crosswalk <- df_composition %>%
+  dplyr::select(prop_crosswalk, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe3 <- lmer(prop_crosswalk ~ Composition + (1| State),
+                   data = df_prop_crosswalk, REML=FALSE)
+
+mod_na_cov_fe3 <- lmer(prop_crosswalk ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_crosswalk, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Not single family home 
+
+df_prop_not_single_family_home <- df_composition %>%
+  dplyr::select(prop_not_single_family_home, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe4 <- lmer(prop_not_single_family_home ~ Composition +(1| State),
+                   data = df_prop_not_single_family_home, REML=FALSE)
+
+mod_na_cov_fe4 <- lmer(prop_not_single_family_home ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_not_single_family_home, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Single Lane 
+df_prop_single_lane <- df_composition %>%
+  dplyr::select(prop_single_lane, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe5 <- lmer(prop_single_lane ~ Composition +(1| State),
+                   data = df_prop_single_lane, REML=FALSE)
+
+mod_na_cov_fe5 <- lmer(prop_single_lane ~Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_single_lane, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+### new table 
+tab_model(mod_na_cov_fe1, 
+          mod_na_cov_fe2, 
+          mod_na_cov_fe3, 
+          mod_na_cov_fe4, 
+          mod_na_cov_fe5, 
+          show.se = FALSE,
+          collapse.se = FALSE,
+          col.order = c("est", "ci", "p"),
+          show.stat = TRUE,
+          show.ci = 0.95,
+          collapse.ci = FALSE,
+          p.style = "numeric",
+          digits.p = 2,
+          dv.labels = c("% Dilapidated", "% Green Space",  "% Crosswalk", "% Non-Single Family Home",  "% Single Lane", ""),
+          pred.labels = c("Intercept",
+                          "Mixed",
+                          "Predominantly Black",
+                          "Predominantly minoritized racial group other than Black",
+                          "log(Household Income)",
+                          "% College",
+                          "Age",
+                          "% Female",
+                          "% Insured",
+                          "% Owner",
+                          "% Vacant",
+                          "% Single Family"),
+          CSS = list(
+            modelcolumn1 = "background-color: #f0f0f0;", 
+            modelcolumn3 = "background-color: #f0f0f0;", 
+            modelcolumn5 = "background-color: #f0f0f0;"
+  )
+  ,
+  file = "../../Output/Supplementary/TableS7.html"
+)
+
+### Null models
+tab_model(mod_na_fe1, 
+          mod_na_fe2, 
+          mod_na_fe3, 
+          mod_na_fe4, 
+          mod_na_fe5, 
+          show.se = FALSE,
+          collapse.se = FALSE,
+          col.order = c("response.level","est", "ci", "p"),
+          show.stat = TRUE,
+          show.ci = 0.95,
+          collapse.ci = FALSE,
+          p.style = "numeric",
+          digits.p = 2,
+          dv.labels = c("% Dilapidated", "% Green Space",  "% Crosswalk", "% Non-Single Family Home",  "% Single Lane", ""),
+          pred.labels = c("Intercept",
+                          "Mixed",
+                          "Predominantly Black",
+                          "Predominantly minoritized racial group other than Black"
+                          
+                          ),
+          CSS = list(
+            modelcolumn1 = "background-color: #f0f0f0;", 
+            modelcolumn3 = "background-color: #f0f0f0;", 
+            modelcolumn5 = "background-color: #f0f0f0;"
+  )
+  ,
+  file = "../../Output/Supplementary/TableS7 (null).html"
+)
+```
+
+##### Table S9. 10% cut-off
+
+1. Predominantly white: Tracts where there are at least 60% of non-Hispanic whites and no minority group represents more than 10%.
+2. Predominantly black: Tracts that have at least 50% non-Hispanic blacks and no more than 10% of another racial/ethnic group
+3. Predominantly non-black minority: Tracts consist of at least 50% of a certain non-black minority and no more than 10% of non-Hispanic blacks
+Mixed: Tracts that annot be classified into any of the typologies above. 
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+df_composition <- df %>%
+  dplyr::select(-geometry) %>%
+  mutate(Composition = ifelse(White >= 60 & Black < 10 & Hispanic < 10 & Asian < 10 & Native < 10 & HIPI < 10, "Predominantly White",
+                       ifelse(Black >= 50 & White < 10 & Hispanic < 10 & Asian < 10 & Native < 10 & HIPI < 10, "Predominantly Black",
+                        ifelse(Black < 10 & White < 10 & (Asian >= 50 | Hispanic >= 50 | Native >= 50 | HIPI >= 50), "Predominantly minoritized racial group other than Black", "Mixed"))))  %>%
+  mutate(Composition = factor(Composition),
+         bi_PW = ifelse(Composition == "Predominantly White", 1, 0),
+         bi_PB = ifelse(Composition == "Predominantly Black", 1, 0),
+         bi_PNB = ifelse(Composition == "Predominantly minoritized racial group other than Black", 1, 0),
+         bi_mixed = ifelse(Composition == "Mixed", 1, 0)) %>%
+  mutate(Pct_college = Pct_college / 100,
+  Pct_Female = Pct_Female / 100,
+  Pct_insurance = Pct_insurance / 100,
+  Pct_Owner = Pct_Owner / 100, 
+  Pct_Vacant = Pct_Vacant / 100,
+  Pct_SingleFam = Pct_SingleFam /100,
+  Urban_Rural_New = as.numeric(Urban_Rural_New))
+
+df_composition$Composition <- relevel(df_composition$Composition, "Predominantly White")
+
+df_composition <- df_composition %>%
+  dplyr::filter(Urban_Rural_New == 1)
+```
+
+```{r}
+table(df_composition$Composition)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Dilapidated Building 
+
+df_prop_dilapbldg <- df_composition %>%
+  dplyr::select(prop_dilapbldg, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe1 <- lmer(prop_dilapbldg ~ Composition + (1|State),
+                   data = df_prop_dilapbldg, REML=FALSE)
+
+mod_na_cov_fe1 <- lmer(prop_dilapbldg ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam + (1|State),
+                       data = df_prop_dilapbldg, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Green Space
+
+df_prop_green <- df_composition %>%
+  dplyr::select(prop_green, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam , State) %>%
+  na.omit()
+
+mod_na_fe2 <- lmer(prop_green ~ Composition +(1| State),
+                   data = df_prop_green, REML=FALSE)
+
+mod_na_cov_fe2 <- lmer(prop_green ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_green, REML=FALSE)
+```
+
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Crosswalk
+
+df_prop_crosswalk <- df_composition %>%
+  dplyr::select(prop_crosswalk, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe3 <- lmer(prop_crosswalk ~ Composition + (1| State),
+                   data = df_prop_crosswalk, REML=FALSE)
+
+mod_na_cov_fe3 <- lmer(prop_crosswalk ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_crosswalk, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Not single family home 
+
+df_prop_not_single_family_home <- df_composition %>%
+  dplyr::select(prop_not_single_family_home, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe4 <- lmer(prop_not_single_family_home ~ Composition +(1| State),
+                   data = df_prop_not_single_family_home, REML=FALSE)
+
+mod_na_cov_fe4 <- lmer(prop_not_single_family_home ~ Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam + (1| State),
+                       data = df_prop_not_single_family_home, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+### Single Lane 
+
+df_prop_single_lane <- df_composition %>%
+  dplyr::select(prop_single_lane, Composition, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam, State) %>%
+  na.omit()
+
+mod_na_fe5 <- lmer(prop_single_lane ~ Composition +(1| State),
+                   data = df_prop_single_lane, REML=FALSE)
+
+mod_na_cov_fe5 <- lmer(prop_single_lane ~Composition + log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner + Pct_Vacant + Pct_SingleFam +(1| State),
+                       data = df_prop_single_lane, REML=FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+### new table 
+tab_model(mod_na_cov_fe1, 
+          mod_na_cov_fe2, 
+          mod_na_cov_fe3, 
+          mod_na_cov_fe4, 
+          mod_na_cov_fe5, 
+          show.se = FALSE,
+          collapse.se = FALSE,
+          col.order = c("est", "ci", "p"),
+          show.stat = TRUE,
+          show.ci = 0.95,
+          collapse.ci = FALSE,
+          p.style = "numeric",
+          digits.p = 2,
+          dv.labels = c("% Dilapidated", "% Green Space",  "% Crosswalk", "% Non-Single Family Home",  "% Single Lane", ""),
+          pred.labels = c("Intercept",
+                          "Mixed",
+                          "Predominantly Black",
+                          "Predominantly minoritized racial group other than Black",
+                          "log(Household Income)",
+                          "% College",
+                          "Age",
+                          "% Female",
+                          "% Insured",
+                          "% Owner",
+                          "% Vacant",
+                          "% Single Family"),
+          CSS = list(
+            modelcolumn1 = "background-color: #f0f0f0;", 
+            modelcolumn3 = "background-color: #f0f0f0;", 
+            modelcolumn5 = "background-color: #f0f0f0;"
+  )
+  ,
+  file = "../../Output/Supplementary/TableS8.html"
+)
+
+### Null models
+tab_model(mod_na_fe1, 
+          mod_na_fe2, 
+          mod_na_fe3, 
+          mod_na_fe4, 
+          mod_na_fe5, 
+          show.se = FALSE,
+          collapse.se = FALSE,
+          col.order = c("response.level","est", "ci", "p"),
+          show.stat = TRUE,
+          show.ci = 0.95,
+          collapse.ci = FALSE,
+          p.style = "numeric",
+          digits.p = 2,
+          dv.labels = c("% Dilapidated", "% Green Space",  "% Crosswalk", "% Non-Single Family Home",  "% Single Lane", ""),
+          pred.labels = c("Intercept",
+                          "Mixed",
+                          "Predominantly Black",
+                          "Predominantly minoritized racial group other than Black"
+                          
+                          ),
+          CSS = list(
+            modelcolumn1 = "background-color: #f0f0f0;", 
+            modelcolumn3 = "background-color: #f0f0f0;", 
+            modelcolumn5 = "background-color: #f0f0f0;"
+  )
+  ,
+  file = "../../Output/Supplementary/TableS8 (null).html"
+)
+```
+

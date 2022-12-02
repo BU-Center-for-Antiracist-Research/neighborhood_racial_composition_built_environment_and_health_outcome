@@ -1,0 +1,163 @@
+---
+title: "Exploration of Neighborhood Racial Composition, Built Environment and Health Outcomes"
+output: html_document
+---
+
+```{r message=FALSE}
+library(tidyverse)
+library(dplyr)
+library(sf)
+library(readxl)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load 2019 ACS data
+```{r}
+race_raw_data <- readRDS("../../RawData/census/race_raw_data.rds")
+race_percent_data <- readRDS("../../RawData/census/race_percent_data.rds")
+econ_data <- readRDS("../../RawData/census/econ_data.rds")
+college_percent_data <- readRDS("../../RawData/census/college_percent_data.rds")
+age_data <- readRDS("../../RawData/census/age_data.rds")
+female_percent_data <- readRDS("../../RawData/census/female_percent_data.rds")
+insurance_percent_data <- readRDS("../../RawData/census/insurance_percent_data.rds")
+owner_occupied_percent_data <- readRDS("../../RawData/census/owner_occupied_percent_data.rds")
+vacant_housing_percent_data <- readRDS("../../RawData/census/vacant_housing_percent_data.rds")
+single_fam_percent_data <- readRDS("../../RawData/census/single_fam_percent_data.rds")
+```
+
+### Create a one dataset
+```{r}
+# Put all data frames into list
+df_list <- list(race_raw_data, race_percent_data, econ_data, college_percent_data, 
+                age_data, female_percent_data, insurance_percent_data, owner_occupied_percent_data,
+                vacant_housing_percent_data, single_fam_percent_data)
+
+# Merge all data frames together
+census_data <- df_list %>% reduce(full_join, by=c("GEOID")) %>%
+  dplyr::select(-NAME.y, -NAME.x.x, -NAME.y.y, -NAME.x.x.x, -NAME.y.y.y, -NAME.x.x.x.x, -NAME.y.y.y.y, -NAME.x.x.x.x.x, -NAME.y.y.y.y.y) %>%
+  dplyr::rename(NAME = NAME.x)
+
+saveRDS(census_data, file = "../../RawData/census/census_data.rds")
+```
+
+### Merge GSV and ACS data
+```{r}
+tract_gsv <- read.csv("../../RawData/GSV_censustract.csv", colClasses = c(tract2010 = "character"))
+census_data <- readRDS("../../RawData/census/census_data.rds")
+
+tract_gsv$GEOID <- as.character(tract_gsv$tract2010)
+
+gsv_covariates_census <- inner_join(tract_gsv, census_data, by = "GEOID")
+
+# Split name column into firstname and last name
+gsv_covariates_census <- gsv_covariates_census %>% 
+  separate(NAME, c('Census', 'County', 'State'), sep = ", ") %>%
+  as.tibble()
+
+saveRDS(gsv_covariates_census, file = "../../FinalData/gsv_covariates_census.rds")
+```
+
+### Add Urban-Rural Continuuam 
+```{r}
+ruca2010revised <- read_excel("../../RawData/ruca2010revised.xlsx")
+
+gsv_covariates_census_urban <- merge(gsv_covariates_census, ruca2010revised %>% 
+                                       dplyr::select("State-County-Tract FIPS Code (lookup by address at http://www.ffiec.gov/Geocode/)", "Primary RUCA Code 2010"),
+      by.x = 'tract2010',
+      by.y='State-County-Tract FIPS Code (lookup by address at http://www.ffiec.gov/Geocode/)',
+      all.x=TRUE
+      )
+
+gsv_covariates_census_urban <- gsv_covariates_census_urban %>%
+  mutate(Urban_Rural_New = recode_factor(`Primary RUCA Code 2010`,
+                                         `1`=1, `2`=1, `3`=1,
+                                         `4`=2, `5`=2, `6`=2,
+                                         `7`=3, `8`=3, `9`=3,
+                                         `10`=4))
+```
+
+### Merge with health outcomes 
+```{r}
+PLACES_shp <- st_read("../../RawData/PLACES_ Census Tract Data (GIS Friendly Format), 2020 release/geo_export_d616bbc1-d560-4c9b-984e-57c9e4cb5117.shp")
+
+PLACES_shp <- PLACES_shp %>%
+  dplyr::rename(GEOID = tractfips) %>%
+  mutate(GEOID = as.character(GEOID))
+
+df <- inner_join(gsv_covariates_census_urban, PLACES_shp, by = c("GEOID"))
+
+saveRDS(df, file = "../../FinalData/finaldata.rds")
+```
+ß
+
+#Merge with HOLC data
+```{r}
+df <- readRDS(file = "../../FinalData/finaldata.rds")
+holc_v2=st_read("../../RawData/holc_census_tracts/holc_census_tracts.shp")%>% as.data.frame() %>% dplyr::select(-geometry)
+
+df_composition <- df %>%
+  mutate(Composition = ifelse(White >= 60 & Black < 20 & Hispanic < 20 & Asian < 20 & Native < 20 & HIPI < 20, "PW",
+                       ifelse(Black >= 50 & White < 20 & Hispanic < 20 & Asian < 20 & Native < 20 & HIPI < 20, "PB",
+                        ifelse(Black < 20 & White < 20 & (Asian >= 50 | Hispanic >= 50 | Native >= 50 | HIPI >= 50), "PNB", "Mixed"))))  %>%
+  mutate(Composition = factor(Composition),
+         bi_PW = ifelse(Composition == "PW", 1, 0),
+         bi_PB = ifelse(Composition == "PB", 1, 0),
+         bi_PNB = ifelse(Composition == "PNB", 1, 0),
+         bi_mixed = ifelse(Composition == "Mixed", 1, 0)) %>%
+  mutate(Pct_college = Pct_college / 100,
+  Pct_Female = Pct_Female / 100,
+  Pct_insurance = Pct_insurance / 100,
+  Pct_Owner = Pct_Owner / 100, 
+  Pct_Vacant = Pct_Vacant / 100,
+  Pct_SingleFam = Pct_SingleFam /100,
+  Urban_Rural_New = as.numeric(Urban_Rural_New))
+
+df_composition$Composition <- relevel(df_composition$Composition, "PW")
+
+df_composition <- df_composition  %>% 
+  dplyr::filter(Urban_Rural_New == 1)
+
+df_composition=df_composition %>% mutate(county_code=as.factor(str_sub(tract2010,1, 5)))
+
+# Filter E grade (specific cases for business area. See example of https://dsl.richmond.edu/panorama/redlining/#loc=14/32.07/-81.12&mapview=graded&city=savannah-ga&area=E24)
+holc_v2_clean = holc_v2 %>% filter(holc_grade != "E")
+table(holc_v2_clean$holc_grade)
+
+# sum up by tract and grade
+holc_groupby_tract=holc_v2_clean %>%drop_na(holc_grade) %>% group_by(geoid, holc_grade) %>% summarise(tract_prop=sum(tract_prop))
+
+holc_groupby_tract
+# keep the most prevalent grade per tract
+holc_groupby_tract_keep_max=holc_groupby_tract %>% group_by(geoid) %>%
+             filter(tract_prop == max(tract_prop)) 
+
+# determine the grade by 0.5
+holc_groupby_tract_keep_max= holc_groupby_tract_keep_max %>% mutate(holc_grade = holc_grade %>% fct_expand("Other")) %>%
+  mutate(majority_grade = if_else(tract_prop >= 0.5, holc_grade, factor('Other')))
+
+table(holc_groupby_tract_keep_max$majority_grade)
+
+df_holc_v2=merge(df_composition, holc_groupby_tract_keep_max,
+      by.x='tract2010',
+      by.y = 'geoid',
+      all.x  = TRUE
+      )
+
+table(df_holc_v2$majority_grade, useNA = c("always"))
+
+saveRDS(df_holc_v2, file="../../FinalData/finaldata_holc.rds")
+
+
+# Writing the HOLC into shape files for map plotting
+all_census=st_read('../../QGISProject/census_shape/census_shape.shp')
+
+st_write(all_census %>% filter(GEOID %in% df_holc_v2[!is.na(df_holc_v2$majority_grade),'tract2010']), 
+         "../../QGISProject/holc_shape/holc_shapefile.shp", append=FALSE)
+
+```
+
+
+
+
+
