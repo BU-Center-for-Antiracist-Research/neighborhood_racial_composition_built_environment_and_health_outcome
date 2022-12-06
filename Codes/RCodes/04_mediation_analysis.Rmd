@@ -13,7 +13,7 @@ library(merTools)
 library(bife)
 
 options(scipen = 999)
-
+set.seed(1)
 knitr::opts_chunk$set(echo = TRUE)
 
 
