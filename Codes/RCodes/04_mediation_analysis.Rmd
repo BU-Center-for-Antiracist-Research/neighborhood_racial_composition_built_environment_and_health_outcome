@@ -50,6 +50,7 @@ df_composition <- df_composition %>% dplyr::select(-geometry) %>%
 ## Define the function
 ```{r}
 lmer_topo_mediatin=function(treatment_var, med_var, outcome_var, REML=FALSE){
+    set.seed(1)
     dat <- df_composition %>%  drop_na(c(treatment_var, med_var, outcome_var, Median.household.income, Pct_college , Age, Pct_Female , Pct_insurance , Pct_Owner , Pct_Vacant , Pct_SingleFam , State))
     
     formula_total=formula(paste0(outcome_var,'~',treatment_var,"+ log(Median.household.income) + Pct_college + Age + Pct_Female + Pct_insurance + Pct_Owner+Pct_Vacant+Pct_SingleFam + (1 |State)" ))
@@ -97,6 +98,7 @@ lmer_topo_mediatin=function(treatment_var, med_var, outcome_var, REML=FALSE){
 }
 
 lmer_topo_mediatin_unadjusted=function(treatment_var, med_var, outcome_var, REML=FALSE){
+    set.seed(1)
     dat <- df_composition %>%  drop_na(c(treatment_var, med_var, outcome_var, State))
     
     formula_total=formula(paste0(outcome_var,'~',treatment_var," + (1 |State)" ))
@@ -148,6 +150,7 @@ lmer_topo_mediatin_unadjusted=function(treatment_var, med_var, outcome_var, REML
 
 ## Urban unadjusted
 ```{r}
+set.seed(1)
 be_cols=c("prop_dilapbldg", "prop_green", "prop_crosswalk","prop_not_single_family_home", "prop_single_lane")
 
 health_cols=c('casthma_cr','diabetes_c' ,'sleep_crud')
@@ -168,6 +171,7 @@ for (health in health_cols){
 
 ## Urban Adjusted
 ```{r}
+set.seed(1)
 be_cols=c("prop_dilapbldg", "prop_green","prop_crosswalk","prop_not_single_family_home", "prop_single_lane")
 
 health_cols=c('casthma_cr','diabetes_c' ,'sleep_crud')
