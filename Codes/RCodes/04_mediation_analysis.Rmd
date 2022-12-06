@@ -169,6 +169,8 @@ for (health in health_cols){
   }
 ```
 
+Note: the mediation effects was obtained from 1000 simulations. Therefore, the estimates of the effects might vary for each run. You can set the seed as any number below.
+
 ## Urban Adjusted
 ```{r}
 set.seed(1)
