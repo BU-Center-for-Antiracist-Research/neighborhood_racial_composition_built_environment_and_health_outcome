@@ -185,6 +185,41 @@ tab_model(mod_na_cov_fe1,
   file = "../../Output/Table2.html"
 )
 
+tab_model(mod_na_cov_fe1, 
+          mod_na_cov_fe2, 
+          mod_na_cov_fe3, 
+          mod_na_cov_fe4, 
+          mod_na_cov_fe5, 
+          show.se = FALSE,
+          collapse.se = FALSE,
+          col.order = c("est", "ci", "p"),
+          show.stat = TRUE,
+          show.ci = 0.95,
+          collapse.ci = FALSE,
+          p.style = "numeric",
+          digits.p = 3,
+          dv.labels = c("% Dilapidated", "% Green Space",  "% Crosswalk", "% Non-Single Family Home",  "% Single Lane", ""),
+          pred.labels = c("Intercept",
+                          "Mixed",
+                          "Predominantly Black",
+                          "Predominantly minoritized racial group other than Black",
+                          "log(Household Income)",
+                          "% College",
+                          "Age",
+                          "% Female",
+                          "% Insured",
+                          "% Owner",
+                          "% Vacant",
+                          "% Single Family"),
+          CSS = list(
+            modelcolumn1 = "background-color: #f0f0f0;", 
+            modelcolumn3 = "background-color: #f0f0f0;", 
+            modelcolumn5 = "background-color: #f0f0f0;"
+  )
+  ,
+  file = "../../Output/Table2 (p-values).html"
+)
+
 ### Null models (Supplementary Materials Table S2)
 tab_model(mod_na_fe1, 
           mod_na_fe2, 
