@@ -7,12 +7,12 @@ This repository contains the data and code for the paper **Neighborhood Racial C
 
 ## Documentation
 
-- FinalData: this folder contains the final datasets we constructed for the analysis. The finaldata_holc contains the additional variables for HOLC graded analysis. The data dictionary for Built Environment indicators can also be found here.
-- Codes: this folder contains the R scripts and the Python code for the data analysis and visualizations. Scripts are numbered in sequence.
+- FinalData: this folder contains the final datasets we constructed for the analysis. The finaldata_holc contains the additional variables for Home Owners’ Loan Corporation (HOLC) graded analysis. The data dictionary for the built environment indicators can also be found here.
+- Code: this folder contains the R scripts and the Python code for the data analysis and visualizations. Scripts are numbered in sequence.
 - Output: this folder contains the tables we used in the paper or the supplementary materials.
 - Figures: this folder contains the figures genereated in R or Python that was included in the paper and its supplement.
 - QGISProject: this folder contains the QGIS project and the corresponding shapefiles used for producing Figure 1 in the paper.
-- RawData: this folder contains the raw datasets in their original shape.
+- RawData: this folder contains the raw datasets.
 
 ### Additional Notes on Figures and tables
 All tables and figures in the Output or Figures folder are directly exported from R or Python, except for: 
