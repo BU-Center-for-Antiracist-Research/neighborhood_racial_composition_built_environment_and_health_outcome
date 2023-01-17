@@ -1,7 +1,7 @@
-# Neighborhood Racial Composition, Historical Redlining and the Built Environment: A Cross-Sectional Analysis
+# Association of Neighborhood Racial and Ethnic Composition and Historical Redlining With Built Environment Indicators Derived From Street View Images in the US
 
 
-This repository contains the data and code for the paper **Neighborhood Racial Composition, Historical Redlining and the Built Environment: A Cross-Sectional Analysis**
+This repository contains the data and code for the paper **Association of Neighborhood Racial and Ethnic Composition and Historical Redlining With Built Environment Indicators Derived From Street View Images in the US**
 
 
 
